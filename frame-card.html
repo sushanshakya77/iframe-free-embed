@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>framed review-card</title>
+<style>
+  /* This document is the whole point of the comparison: it is a *separate
+     document*. It cannot see the host page's --embed-* variables, so the
+     card below renders with the library defaults, forever. */
+  html {
+    background: transparent;
+  }
+  body {
+    margin: 0;
+    display: flex;
+    justify-content: center;
+  }
+</style>
+
+<review-card
+  author="Marco"
+  rating="4"
+  quote="Solid build quality, fast shipping. Identical element, identical code — sealed in a second document."
+></review-card>
+
+<script type="module" src="./review-card.js"></script>

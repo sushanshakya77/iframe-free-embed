@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Encapsulation without exile — a runnable embed blueprint</title>
+    <meta
+      name="description"
+      content="A live proof that a Custom Element backed by Shadow DOM satisfies the third-party embed contract without exiling your widget to an iframe."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         THE HOSTILE HOST STYLESHEET
+         Global, unscoped, !important — exactly the kind of CSS a real
+         merchant's theme throws at a third-party embed. It is toggled live
+         in Plate 01 by flipping `media` between "all" and "not all".
+         (`disabled` is a JS-only property on <style> — as a content
+         attribute it does nothing, so the sheet would load live.)
+
+         Note: this page's own chrome deliberately avoids <p> and .card so
+         that these rules stay *genuinely* global rather than quietly scoped.
+         ═══════════════════════════════════════════════════════════════ -->
+    <style id="hostile" media="not all">
+      p {
+        color: #ff2d1f !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.04em !important;
+      }
+      .card {
+        display: none !important;
+      }
+      .stars {
+        color: #ff2d1f !important;
+      }
+    </style>
+
+    <style>
+      :root {
+        --ground: #08121a;
+        --ground-2: #0d1e2b;
+        --panel: #0f2231;
+        --ink: #e4eef6;
+        --ink-dim: #8ba7bd;
+        --ink-faint: #4f6d84;
+        --rule: rgba(140, 195, 230, 0.18);
+        --rule-soft: rgba(140, 195, 230, 0.08);
+        --accent: #f4a83c;
+        --danger: #ff5f56;
+        --pass: #4ade80;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--ink);
+        font: 400 15px/1.65 "IBM Plex Mono", ui-monospace, monospace;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+
+      /* Cyanotype grid, fading toward the fold */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image:
+          linear-gradient(var(--rule-soft) 1px, transparent 1px),
+          linear-gradient(90deg, var(--rule-soft) 1px, transparent 1px);
+        background-size: 34px 34px;
+        -webkit-mask-image: radial-gradient(
+          ellipse 90% 60% at 50% 0%,
+          #000 10%,
+          transparent 80%
+        );
+        mask-image: radial-gradient(
+          ellipse 90% 60% at 50% 0%,
+          #000 10%,
+          transparent 80%
+        );
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      body::after {
+        content: "";
+        position: fixed;
+        top: -30vh;
+        left: 50%;
+        width: 120vw;
+        height: 70vh;
+        translate: -50% 0;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(60, 140, 200, 0.16),
+          transparent 65%
+        );
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .shell {
+        position: relative;
+        z-index: 1;
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 0 28px 120px;
+      }
+
+      /* ─── Reveal ─────────────────────────────────────────────────── */
+      .rise {
+        animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+        animation-delay: calc(var(--i, 0) * 90ms);
+      }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          translate: 0 14px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+
+      /* ─── Masthead ───────────────────────────────────────────────── */
+      header {
+        padding: 92px 0 64px;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin-bottom: 28px;
+      }
+      .eyebrow::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--rule);
+      }
+
+      h1 {
+        font-family: "Instrument Serif", Georgia, serif;
+        font-weight: 400;
+        font-size: clamp(44px, 8vw, 92px);
+        line-height: 0.95;
+        letter-spacing: -0.02em;
+        margin: 0 0 8px;
+      }
+      h1 em {
+        font-style: italic;
+        color: var(--accent);
+      }
+
+      .lede {
+        max-width: 62ch;
+        color: var(--ink-dim);
+        margin: 28px 0 0;
+        font-size: 15px;
+      }
+      .lede strong {
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      .masthead-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 36px;
+      }
+      a.chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        color: var(--ink-dim);
+        text-decoration: none;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        transition:
+          border-color 0.2s,
+          color 0.2s,
+          background 0.2s;
+      }
+      a.chip:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: rgba(244, 168, 60, 0.06);
+      }
+
+      /* ─── Plates ─────────────────────────────────────────────────── */
+      .plate {
+        padding: 76px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .plate-head {
+        display: grid;
+        grid-template-columns: 88px 1fr;
+        gap: 24px;
+        align-items: start;
+        margin-bottom: 40px;
+      }
+
+      .plate-no {
+        font-family: "Instrument Serif", Georgia, serif;
+        font-size: 66px;
+        line-height: 0.8;
+        color: transparent;
+        -webkit-text-stroke: 1px var(--rule);
+        letter-spacing: -0.04em;
+      }
+
+      h2 {
+        font-family: "Instrument Serif", Georgia, serif;
+        font-weight: 400;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.05;
+        letter-spacing: -0.01em;
+        margin: 0 0 14px;
+      }
+
+      .claim {
+        color: var(--ink-dim);
+        max-width: 66ch;
+        margin: 0;
+      }
+      .claim code {
+        color: var(--accent);
+        font-size: 0.92em;
+      }
+
+      /* ─── Specimen frames ────────────────────────────────────────── */
+      .bench {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+      }
+
+      .specimen {
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        background: linear-gradient(
+          180deg,
+          rgba(20, 45, 65, 0.5),
+          rgba(10, 22, 32, 0.5)
+        );
+        display: flex;
+        flex-direction: column;
+      }
+
+      .specimen-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid currentColor;
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        white-space: nowrap;
+      }
+      .pill::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .pill.is-pass {
+        color: var(--pass);
+      }
+      .pill.is-fail {
+        color: var(--danger);
+      }
+      .pill.is-idle {
+        color: var(--ink-faint);
+      }
+
+      .stage {
+        flex: 1;
+        display: grid;
+        place-items: center;
+        padding: 30px 20px;
+        min-height: 200px;
+        position: relative;
+      }
+
+      /* Ghost outline that shows through when the host CSS hides the card */
+      .stage::before {
+        content: "element hidden by host css";
+        position: absolute;
+        inset: 24px;
+        display: grid;
+        place-items: center;
+        border: 1px dashed rgba(255, 95, 86, 0.35);
+        border-radius: 12px;
+        color: rgba(255, 95, 86, 0.5);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .stage.is-voided::before {
+        opacity: 1;
+      }
+
+      .stage > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      /* ─── Controls ───────────────────────────────────────────────── */
+      .console {
+        margin-top: 20px;
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        background: rgba(8, 18, 26, 0.6);
+        padding: 18px 20px;
+      }
+
+      .console-title {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin-bottom: 16px;
+      }
+
+      .switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        user-select: none;
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .switch input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .track {
+        width: 44px;
+        height: 24px;
+        border-radius: 999px;
+        border: 1px solid var(--rule);
+        background: rgba(0, 0, 0, 0.3);
+        position: relative;
+        transition:
+          background 0.25s,
+          border-color 0.25s;
+        flex: none;
+      }
+      .track::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--ink-faint);
+        transition:
+          translate 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+          background 0.25s;
+      }
+      .switch input:checked + .track {
+        background: rgba(255, 95, 86, 0.18);
+        border-color: var(--danger);
+      }
+      .switch input:checked + .track::after {
+        translate: 20px 0;
+        background: var(--danger);
+      }
+      .switch input:focus-visible + .track {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+
+      .knobs {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 18px;
+      }
+
+      .knob {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .knob label {
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--ink-dim);
+      }
+      .knob label var {
+        font-style: normal;
+        color: var(--accent);
+      }
+
+      input[type="color"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 100%;
+        height: 34px;
+        padding: 0;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        background: transparent;
+        cursor: pointer;
+      }
+      input[type="color"]::-webkit-color-swatch-wrapper {
+        padding: 3px;
+      }
+      input[type="color"]::-webkit-color-swatch {
+        border: none;
+        border-radius: 2px;
+      }
+      input[type="color"]::-moz-color-swatch {
+        border: none;
+        border-radius: 2px;
+      }
+
+      input[type="range"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 100%;
+        height: 34px;
+        background: transparent;
+        cursor: pointer;
+      }
+      input[type="range"]::-webkit-slider-runnable-track {
+        height: 2px;
+        background: var(--rule);
+      }
+      input[type="range"]::-moz-range-track {
+        height: 2px;
+        background: var(--rule);
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--accent);
+        margin-top: -6px;
+      }
+      input[type="range"]::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border: none;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .presets {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid var(--rule-soft);
+      }
+
+      button {
+        font: inherit;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        color: var(--ink-dim);
+        background: transparent;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        padding: 7px 13px;
+        cursor: pointer;
+        transition:
+          border-color 0.2s,
+          color 0.2s,
+          background 0.2s;
+      }
+      button:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: rgba(244, 168, 60, 0.06);
+      }
+      button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      /* ─── Code ───────────────────────────────────────────────────── */
+      pre {
+        margin: 0;
+        padding: 16px 18px;
+        background: rgba(0, 0, 0, 0.32);
+        border: 1px solid var(--rule-soft);
+        border-radius: 3px;
+        overflow-x: auto;
+        font-size: 12.5px;
+        line-height: 1.7;
+        color: var(--ink-dim);
+        tab-size: 2;
+      }
+      pre .k {
+        color: var(--danger);
+      }
+      pre .v {
+        color: var(--accent);
+      }
+      pre .c {
+        color: var(--ink-faint);
+      }
+
+      .note {
+        margin-top: 16px;
+        padding-left: 14px;
+        border-left: 1px solid var(--rule);
+        color: var(--ink-faint);
+        font-size: 12.5px;
+        line-height: 1.7;
+        max-width: 70ch;
+      }
+      .note b {
+        color: var(--ink-dim);
+        font-weight: 500;
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        align-items: start;
+      }
+      @media (max-width: 820px) {
+        .split {
+          grid-template-columns: 1fr;
+        }
+        .plate-head {
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+        .plate-no {
+          font-size: 44px;
+        }
+        .shell {
+          padding: 0 20px 80px;
+        }
+      }
+
+      iframe {
+        display: block;
+        width: 100%;
+        border: 0;
+      }
+
+      /* ─── Footer ─────────────────────────────────────────────────── */
+      footer {
+        padding-top: 64px;
+        color: var(--ink-faint);
+        font-size: 12.5px;
+        line-height: 1.8;
+        max-width: 70ch;
+      }
+      footer a {
+        color: var(--ink-dim);
+      }
+      footer strong {
+        color: var(--ink-dim);
+        font-weight: 500;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="shell">
+      <!-- ═══════════ MASTHEAD ═══════════ -->
+      <header>
+        <div class="eyebrow rise">Runnable blueprint · 4 files · no build step</div>
+        <h1 class="rise" style="--i: 1">
+          Encapsulation<br />without <em>exile</em>
+        </h1>
+        <div class="lede rise" style="--i: 2">
+          Every widget you paste into someone else's page needs the same three
+          things: <strong>styles that don't collide</strong>,
+          <strong>globals that don't clash</strong>, and
+          <strong>a host it doesn't break</strong>. For twenty years the answer
+          was an <code>&lt;iframe&gt;</code> — a second document, a sealed room,
+          your widget banished from the page it's supposed to belong to.
+          <br /><br />
+          A Custom Element backed by Shadow DOM satisfies the same contract by
+          <strong>scoping</strong> instead of banishing. Below are three plates
+          that prove it, running live in this page right now. Open the devtools.
+          Read the source. It's four files.
+        </div>
+        <div class="masthead-links rise" style="--i: 3">
+          <a class="chip" href="https://github.com/sushanshakya77/iframe-free-embed">↗ Source on GitHub</a>
+          <a class="chip" href="https://github.com/sushanshakya77">↗ The article</a>
+        </div>
+      </header>
+
+      <!-- ═══════════ PLATE 01 ═══════════ -->
+      <section class="plate">
+        <div class="plate-head">
+          <div class="plate-no">01</div>
+          <div>
+            <h2>The boundary holds</h2>
+            <div class="claim">
+              Both cards below are built by the same function, from the same
+              markup, with the same class names. The left one renders into the
+              page. The right one renders into a shadow root. Flip the switch
+              and watch this page's global stylesheet reach exactly one of them.
+            </div>
+          </div>
+        </div>
+
+        <div class="bench">
+          <div class="specimen">
+            <div class="specimen-bar">
+              <span>Light DOM</span>
+              <span class="pill is-idle" id="pill-light">unprotected</span>
+            </div>
+            <div class="stage" id="stage-light">
+              <div id="unprotected"></div>
+            </div>
+          </div>
+
+          <div class="specimen">
+            <div class="specimen-bar">
+              <span>Shadow root</span>
+              <span class="pill is-idle" id="pill-shadow">scoped</span>
+            </div>
+            <div class="stage">
+              <review-card
+                author="Jess"
+                rating="5"
+                quote="Exactly as pictured. Bought two more."
+              ></review-card>
+            </div>
+          </div>
+        </div>
+
+        <div class="console">
+          <div class="console-title">Host stylesheet</div>
+          <label class="switch">
+            <input type="checkbox" id="hostile-toggle" />
+            <span class="track"></span>
+            <span>Make the host hostile</span>
+          </label>
+          <div style="height: 16px"></div>
+          <pre><span class="c">/* global, unscoped, !important — a real merchant's theme */</span>
+p     { <span class="k">color</span>: #ff2d1f <span class="v">!important</span>; <span class="k">text-transform</span>: uppercase <span class="v">!important</span>; }
+.card { <span class="k">display</span>: none <span class="v">!important</span>; }
+.stars{ <span class="k">color</span>: #ff2d1f <span class="v">!important</span>; }</pre>
+          <div class="note">
+            <b>What just happened.</b> Selectors don't cross a shadow boundary.
+            <code>.card { display: none !important }</code> is as aggressive as
+            CSS gets, and it still can't see inside the shadow root — not
+            because the widget out-specified it, but because the host's
+            selectors never match in there at all. No specificity war. No
+            <code>!important</code> arms race. Different scope.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ PLATE 02 ═══════════ -->
+      <section class="plate">
+        <div class="plate-head">
+          <div class="plate-no">02</div>
+          <div>
+            <h2>Theme crosses on purpose</h2>
+            <div class="claim">
+              The honest comparison. Both cards are
+              <code>&lt;review-card&gt;</code>, registered by the same
+              <code>review-card.js</code>. The only difference: the right one is
+              loaded inside a real <code>&lt;iframe&gt;</code>. Turn the knobs.
+            </div>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="specimen">
+            <div class="specimen-bar">
+              <span>Same document</span>
+              <span class="pill is-pass">inherits</span>
+            </div>
+            <div class="stage" id="brand">
+              <review-card
+                author="Marco"
+                rating="4"
+                quote="Solid build quality, fast shipping. Themed by the host, through the shadow boundary."
+              ></review-card>
+            </div>
+          </div>
+
+          <div class="specimen">
+            <div class="specimen-bar">
+              <span>Inside an iframe</span>
+              <span class="pill is-fail">sealed</span>
+            </div>
+            <div class="stage">
+              <iframe
+                src="./frame-card.html"
+                title="The same review-card element, sealed inside a second document"
+                height="176"
+                loading="lazy"
+              ></iframe>
+            </div>
+          </div>
+        </div>
+
+        <div class="console">
+          <div class="console-title">Host CSS variables</div>
+          <div class="knobs">
+            <div class="knob">
+              <label for="k-bg"><var>--embed-bg</var></label>
+              <input type="color" id="k-bg" value="#111114" />
+            </div>
+            <div class="knob">
+              <label for="k-text"><var>--embed-text</var></label>
+              <input type="color" id="k-text" value="#f5f5f5" />
+            </div>
+            <div class="knob">
+              <label for="k-accent"><var>--embed-accent</var></label>
+              <input type="color" id="k-accent" value="#34d399" />
+            </div>
+            <div class="knob">
+              <label for="k-radius"
+                ><var>--embed-radius</var> · <span id="radius-out">20px</span></label
+              >
+              <input type="range" id="k-radius" min="0" max="36" value="20" />
+            </div>
+          </div>
+          <div class="presets">
+            <button data-preset='["#111114","#f5f5f5","#34d399","20"]'>Midnight</button>
+            <button data-preset='["#fdf6e3","#3b2f1e","#c2410c","2"]'>Newsprint</button>
+            <button data-preset='["#ffffff","#0f172a","#3b82f6","12"]'>Library default</button>
+            <button data-preset='["#1e1b4b","#e0e7ff","#f472b6","36"]'>Candy</button>
+          </div>
+          <div style="height: 18px"></div>
+          <pre><span class="c">/* what the knobs above are writing onto the host element */</span>
+#brand {
+  <span class="k">--embed-bg</span>: <span class="v" id="out-bg">17, 17, 20</span>;
+  <span class="k">--embed-text</span>: <span class="v" id="out-text">245, 245, 245</span>;
+  <span class="k">--embed-accent</span>: <span class="v" id="out-accent">52, 211, 153</span>;
+  <span class="k">--embed-radius</span>: <span class="v" id="out-radius">20px</span>;
+}</pre>
+          <div class="note">
+            <b>Why the left one moves and the right one doesn't.</b> Inherited
+            CSS custom properties pierce a shadow boundary by design — so
+            encapsulation is the default and theming is opt-in. That's the exact
+            inverse of the iframe, where isolation is total and theming is
+            impossible. The framed card can't see these variables because
+            variables don't cross documents, and no amount of CSS will change
+            that. To theme it you'd rebuild the cascade by hand as a config API
+            over <code>postMessage</code>.
+            <br /><br />
+            <b>And notice the height.</b> That iframe is
+            <code>height="176"</code> — a number hardcoded by hand. It has no
+            intrinsic relationship to its content. A production embed measures
+            its own scroll height inside the frame,
+            <code>postMessage</code>s the number out, and listens on the host to
+            resize it — on every content change, every breakpoint, every
+            late-loading image. The card on the left is just an element in
+            normal flow.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ PLATE 03 ═══════════ -->
+      <section class="plate">
+        <div class="plate-head">
+          <div class="plate-no">03</div>
+          <div>
+            <h2>Attributes are the API</h2>
+            <div class="claim">
+              The entire public surface of this embed is a tag and its observed
+              attributes. Change one and the browser calls
+              <code>attributeChangedCallback</code> for you. No message bus, no
+              subscription, no handshake.
+            </div>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="specimen">
+            <div class="specimen-bar">
+              <span>Live element</span>
+              <span class="pill is-pass" id="pill-render">rendered</span>
+            </div>
+            <div class="stage">
+              <review-card
+                id="live"
+                author="Priya"
+                rating="3"
+                quote="Watch the markup on the right change as you click."
+              ></review-card>
+            </div>
+          </div>
+
+          <div class="specimen">
+            <div class="specimen-bar"><span>Host markup</span></div>
+            <div style="padding: 20px">
+              <pre id="live-src"></pre>
+              <div style="height: 16px"></div>
+              <button id="bump">setAttribute("rating", …)</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="console">
+          <div class="console-title">Idempotent registration</div>
+          <pre><span class="c">// embed scripts get included twice more often than you'd think</span>
+defineEmbedElement(<span class="v">"review-card"</span>, observed, styles, renderCard);
+<span class="c">// → </span><span class="v" id="dupe-result">running…</span></pre>
+          <div class="note">
+            Registering the same tag name twice throws
+            <code>NotSupportedError</code> and takes your whole bundle with it.
+            One <code>customElements.get()</code> guard makes the second load a
+            no-op. The line above is the real second call, made by this page on
+            load.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ FOOTER ═══════════ -->
+      <footer>
+        <strong>One thing the iframe still does better.</strong> A shadow root
+        is an encapsulation boundary, not a security boundary —
+        <code>mode: "open"</code> is reachable via
+        <code>element.shadowRoot</code>, and <code>closed</code> only obscures
+        the reference. It scopes style and DOM, not origin. If you have to
+        execute <em>untrusted third-party code</em> — a user-authored plugin, an
+        ad from a network you don't control — the iframe's
+        <code>sandbox</code> and origin isolation are the correct and
+        irreplaceable tool. Use one.
+        <br /><br />
+        But if you're rendering your own trusted UI over your own sanitized
+        data, as the overwhelming majority of embeds do, the iframe is charging
+        you for a guarantee you don't need. The question worth asking before you
+        reach for one:
+        <strong
+          >am I isolating untrusted code, or am I just isolating my
+          styles?</strong
+        >
+        <br /><br />
+        <a href="https://github.com/sushanshakya77/iframe-free-embed">Source</a>
+        ·
+        <a href="https://www.linkedin.com/in/sushan-shakya-8a575a197/">Tell me where this breaks</a>
+      </footer>
+    </div>
+
+    <script type="module">
+      import { defineEmbedElement } from "./define-element.js";
+      import { styles, renderCard, observed } from "./review-card.js";
+
+      /* ── Plate 01 ─────────────────────────────────────────────────
+         The unprotected specimen: the widget's exact stylesheet, but
+         living in the host's document instead of a shadow root. Native
+         CSS nesting scopes it to #unprotected so it doesn't repaint the
+         rest of the page — the host's !important rules still win. */
+      const leaked = document.createElement("style");
+      leaked.textContent = `#unprotected {\n${styles}\n}`;
+      document.head.append(leaked);
+
+      document.getElementById("unprotected").append(
+        renderCard({
+          author: "Jess",
+          rating: "5",
+          quote: "Exactly as pictured. Bought two more.",
+        }),
+      );
+
+      const hostile = document.getElementById("hostile");
+      const stageLight = document.getElementById("stage-light");
+      const pillLight = document.getElementById("pill-light");
+      const pillShadow = document.getElementById("pill-shadow");
+
+      document.getElementById("hostile-toggle").onchange = (e) => {
+        const on = e.target.checked;
+        hostile.media = on ? "all" : "not all";
+        stageLight.classList.toggle("is-voided", on);
+        pillLight.textContent = on ? "overwritten" : "unprotected";
+        pillLight.className = `pill ${on ? "is-fail" : "is-idle"}`;
+        pillShadow.textContent = on ? "untouched" : "scoped";
+        pillShadow.className = `pill ${on ? "is-pass" : "is-idle"}`;
+      };
+
+      /* ── Plate 02 ─────────────────────────────────────────────────
+         Colors are RGB channel triplets so the widget can derive any
+         shade with an alpha — hence the hex→"r, g, b" conversion. */
+      const toChannels = (hex) =>
+        hex
+          .match(/\w\w/g)
+          .map((h) => parseInt(h, 16))
+          .join(", ");
+
+      const brand = document.getElementById("brand");
+      const knobs = {
+        bg: document.getElementById("k-bg"),
+        text: document.getElementById("k-text"),
+        accent: document.getElementById("k-accent"),
+        radius: document.getElementById("k-radius"),
+      };
+
+      const paint = () => {
+        for (const key of ["bg", "text", "accent"]) {
+          const channels = toChannels(knobs[key].value);
+          brand.style.setProperty(`--embed-${key}`, channels);
+          document.getElementById(`out-${key}`).textContent = channels;
+        }
+        const radius = `${knobs.radius.value}px`;
+        brand.style.setProperty("--embed-radius", radius);
+        document.getElementById("out-radius").textContent = radius;
+        document.getElementById("radius-out").textContent = radius;
+      };
+
+      for (const knob of Object.values(knobs)) knob.oninput = paint;
+
+      for (const button of document.querySelectorAll("[data-preset]")) {
+        button.onclick = () => {
+          const [bg, text, accent, radius] = JSON.parse(button.dataset.preset);
+          knobs.bg.value = bg;
+          knobs.text.value = text;
+          knobs.accent.value = accent;
+          knobs.radius.value = radius;
+          paint();
+        };
+      }
+      paint();
+
+      /* ── Plate 03 ───────────────────────────────────────────────── */
+      const live = document.getElementById("live");
+      const liveSrc = document.getElementById("live-src");
+      const pillRender = document.getElementById("pill-render");
+
+      const esc = (s) =>
+        s
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+
+      const reflect = () => {
+        const attrs = observed
+          .map(
+            (name) =>
+              `\n  ${name}<span class="c">=</span>"<span class="v">${esc(live.getAttribute(name) ?? "")}</span>"`,
+          )
+          .join("");
+        liveSrc.innerHTML =
+          `<span class="c">&lt;</span><span class="v">review-card</span>${attrs}` +
+          `<span class="c">&gt;&lt;/</span><span class="v">review-card</span><span class="c">&gt;</span>`;
+      };
+
+      document.getElementById("bump").onclick = () => {
+        const next = (Number(live.getAttribute("rating")) % 5) + 1;
+        live.setAttribute("rating", String(next));
+        reflect();
+        pillRender.textContent = "re-rendered";
+        pillRender.animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 400 });
+      };
+      reflect();
+
+      /* ── Idempotent registration: the real second call ─────────── */
+      const dupe = document.getElementById("dupe-result");
+      try {
+        defineEmbedElement("review-card", observed, styles, renderCard);
+        dupe.textContent = "no-op, no throw. Element still alive.";
+      } catch (error) {
+        dupe.textContent = `threw ${error.name}`;
+        dupe.style.color = "var(--danger)";
+      }
+    </script>
+  </body>
+</html>
