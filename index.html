@@ -631,10 +631,6 @@
       footer a {
         color: var(--ink-dim);
       }
-      footer strong {
-        color: var(--ink-dim);
-        font-weight: 500;
-      }
     </style>
   </head>
 
@@ -815,21 +811,14 @@ p     { <span class="k">color</span>: #ff2d1f <span class="v">!important</span>;
           <div class="note">
             <b>Why the left one moves and the right one doesn't.</b> Inherited
             CSS custom properties pierce a shadow boundary by design — so
-            encapsulation is the default and theming is opt-in. That's the exact
-            inverse of the iframe, where isolation is total and theming is
-            impossible. The framed card can't see these variables because
-            variables don't cross documents, and no amount of CSS will change
-            that. To theme it you'd rebuild the cascade by hand as a config API
-            over <code>postMessage</code>.
+            encapsulation is the default and theming is opt-in. The framed card
+            can't see these variables because variables don't cross documents,
+            and no amount of CSS will change that.
             <br /><br />
             <b>And notice the height.</b> That iframe is
-            <code>height="176"</code> — a number hardcoded by hand. It has no
-            intrinsic relationship to its content. A production embed measures
-            its own scroll height inside the frame,
-            <code>postMessage</code>s the number out, and listens on the host to
-            resize it — on every content change, every breakpoint, every
-            late-loading image. The card on the left is just an element in
-            normal flow.
+            <code>height="176"</code>, a number hardcoded by hand, because a
+            frame has no intrinsic relationship to its content. The card on the
+            left is just an element in normal flow.
           </div>
         </div>
       </section>
@@ -890,67 +879,27 @@ defineEmbedElement(<span class="v">"review-card"</span>, observed, styles, rival
             the same silence means <em>their</em> element renders under your
             tag, and you find out from a support ticket. The call above is real,
             with a genuinely different renderer — Priya's card is still ours up
-            there only because we ran first.
-            <br /><br />
-            <code>customElements.define</code> claims a name in a
-            <b>global registry</b>: the one namespace a custom element cannot
-            scope away, and the clause where the iframe is plainly stronger. Two
-            frames can each hold a <code>&lt;review-card&gt;</code> and never
-            know about each other.
+            there only because we ran first. <code>customElements.define</code>
+            claims a name in a <b>global registry</b>: the one namespace a
+            custom element cannot scope away, where two iframes could each hold
+            a <code>&lt;review-card&gt;</code> and never know.
             <a href="https://developer.chrome.com/blog/scoped-registries"
               >Scoped registries</a
             >
-            close the hole properly —
-            <code>attachShadow({ customElementRegistry })</code> hands the shadow
-            root its own definitions — and they landed in Chrome and Edge 146,
-            partially in Safari 26, and not at all in Firefox. The fix exists
-            and you can't rely on it yet. Until Firefox ships, the mitigation is
-            the least clever one available: pick a name nobody else wants.
+            close it, once Firefox ships them.
           </div>
         </div>
       </section>
 
       <!-- ═══════════ FOOTER ═══════════ -->
       <footer>
-        <strong>What the plates don't show you.</strong> Everything above is the
-        case for scoping. This is the case against it, and it deserves better
-        than a footnote.
-        <br /><br />
-        A shadow root is an encapsulation boundary, not a security boundary.
-        <code>mode: "open"</code> is reachable via
-        <code>element.shadowRoot</code>, and <code>closed</code> only obscures
-        the reference. It scopes style and DOM, not origin. And the iframe isn't
-        only protecting a host from code that <em>means</em> harm — it protects
-        the host from code that is merely <em>wrong</em>. A bug behind an origin
-        boundary stays in the frame. The same bug in the host's document has
-        their DOM, their cart, and their customer's session. Pasting a vendor's
-        <code>&lt;script&gt;</code> means accepting that vendor's CDN, their
-        dependencies, and every version they push to that URL after today,
-        without asking again.
-        <br /><br />
-        Proximity cuts both ways generally. One layout flow means this element
-        can reflow the host's page; one accessibility tree means it can pollute
-        theirs; one event loop means its slow render is their slow render. Look
-        at the iframe in plate 02 — it carries
-        <code>loading="lazy"</code>, deferred loading as a single attribute,
-        where a same-document embed earns the same thing with an
-        <code>IntersectionObserver</code> it writes itself. Being in the page is
-        the entire benefit and the entire risk. It's one fact read twice.
-        <br /><br />
-        So: if you must execute <em>untrusted third-party code</em> — a
-        user-authored plugin, an ad from a network you don't control — or if the
-        host's security review won't accept your supply chain inside their
-        document, the iframe's <code>sandbox</code> and origin isolation are the
-        correct and irreplaceable tool. Use one. If you're rendering your own
-        trusted UI over your own sanitized data into a page whose owner agreed
-        to that, the iframe is charging you for a guarantee you don't need. The
-        question worth asking before you reach for one:
-        <strong
-          >am I isolating untrusted code, or am I just isolating my
-          styles?</strong
-        >
+        A shadow root scopes style and DOM, not origin. It is not a sandbox — if
+        you have to isolate untrusted code, still use an iframe. The article
+        argues the whole trade-off; this page only shows it.
         <br /><br />
         <a href="https://github.com/sushanshakya77/iframe-free-embed">Source</a>
+        ·
+        <a href="https://github.com/sushanshakya77">The article</a>
         ·
         <a href="https://www.linkedin.com/in/sushan-shakya-8a575a197/">Tell me where this breaks</a>
       </footer>
