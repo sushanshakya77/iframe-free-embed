@@ -53,6 +53,10 @@
         --accent: #f4a83c;
         --danger: #ff5f56;
         --pass: #4ade80;
+
+        /* Built-in CSS easings are too weak to read as intentional. */
+        --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+        --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
       }
 
       *,
@@ -120,21 +124,34 @@
 
       /* ─── Reveal ─────────────────────────────────────────────────── */
       .rise {
-        animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
-        animation-delay: calc(var(--i, 0) * 90ms);
+        animation: rise 450ms var(--ease-out) backwards;
+        animation-delay: calc(var(--i, 0) * 60ms);
       }
       @keyframes rise {
         from {
           opacity: 0;
-          translate: 0 14px;
+          translate: 0 12px;
         }
       }
+      @keyframes fade {
+        from {
+          opacity: 0;
+        }
+      }
+
+      /* Reduced motion means gentler, not none: keep the opacity fades that
+         aid comprehension, drop everything that moves. */
       @media (prefers-reduced-motion: reduce) {
-        *,
-        *::before,
-        *::after {
-          animation: none !important;
-          transition: none !important;
+        .rise {
+          animation-name: fade;
+          animation-duration: 200ms;
+        }
+        .track::after {
+          transition-property: background;
+        }
+        button:active,
+        .switch:active .track::after {
+          transform: none;
         }
       }
 
@@ -147,10 +164,8 @@
       .eyebrow {
         display: flex;
         align-items: center;
-        gap: 12px;
-        font-size: 11px;
-        letter-spacing: 0.22em;
-        text-transform: uppercase;
+        gap: 14px;
+        font-size: 13px;
         color: var(--ink-faint);
         margin-bottom: 28px;
       }
@@ -200,17 +215,26 @@
         border-radius: 999px;
         color: var(--ink-dim);
         text-decoration: none;
-        font-size: 12px;
-        letter-spacing: 0.04em;
+        font-size: 13px;
         transition:
-          border-color 0.2s,
-          color 0.2s,
-          background 0.2s;
+          border-color 200ms ease,
+          color 200ms ease,
+          background 200ms ease,
+          transform 160ms var(--ease-out);
       }
-      a.chip:hover {
-        border-color: var(--accent);
-        color: var(--accent);
-        background: rgba(244, 168, 60, 0.06);
+      @media (hover: hover) and (pointer: fine) {
+        a.chip:hover {
+          border-color: var(--accent);
+          color: var(--accent);
+          background: rgba(244, 168, 60, 0.06);
+        }
+      }
+      a.chip:active {
+        transform: scale(0.97);
+      }
+      a.chip:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
       }
 
       /* ─── Plates ─────────────────────────────────────────────────── */
@@ -281,21 +305,19 @@
         gap: 12px;
         padding: 11px 14px;
         border-bottom: 1px solid var(--rule);
-        font-size: 11px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--ink-faint);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ink-dim);
       }
 
       .pill {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 3px 9px;
+        padding: 3px 10px;
         border-radius: 999px;
         border: 1px solid currentColor;
-        font-size: 10px;
-        letter-spacing: 0.1em;
+        font-size: 12px;
         white-space: nowrap;
       }
       .pill::before {
@@ -326,19 +348,17 @@
 
       /* Ghost outline that shows through when the host CSS hides the card */
       .stage::before {
-        content: "element hidden by host css";
+        content: "Hidden by the host's stylesheet";
         position: absolute;
         inset: 24px;
         display: grid;
         place-items: center;
         border: 1px dashed rgba(255, 95, 86, 0.35);
         border-radius: 12px;
-        color: rgba(255, 95, 86, 0.5);
-        font-size: 11px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
+        color: rgba(255, 95, 86, 0.6);
+        font-size: 13px;
         opacity: 0;
-        transition: opacity 0.3s;
+        transition: opacity 200ms var(--ease-out);
       }
       .stage.is-voided::before {
         opacity: 1;
@@ -359,10 +379,9 @@
       }
 
       .console-title {
-        font-size: 11px;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: var(--ink-faint);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ink-dim);
         margin-bottom: 16px;
       }
 
@@ -388,8 +407,8 @@
         background: rgba(0, 0, 0, 0.3);
         position: relative;
         transition:
-          background 0.25s,
-          border-color 0.25s;
+          background 200ms ease,
+          border-color 200ms ease;
         flex: none;
       }
       .track::after {
@@ -402,8 +421,8 @@
         border-radius: 50%;
         background: var(--ink-faint);
         transition:
-          translate 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
-          background 0.25s;
+          translate 200ms var(--ease-out),
+          background 200ms ease;
       }
       .switch input:checked + .track {
         background: rgba(255, 95, 86, 0.18);
@@ -430,8 +449,7 @@
         gap: 8px;
       }
       .knob label {
-        font-size: 11px;
-        letter-spacing: 0.06em;
+        font-size: 13px;
         color: var(--ink-dim);
       }
       .knob label var {
@@ -509,8 +527,7 @@
 
       button {
         font: inherit;
-        font-size: 12px;
-        letter-spacing: 0.04em;
+        font-size: 13px;
         color: var(--ink-dim);
         background: transparent;
         border: 1px solid var(--rule);
@@ -518,14 +535,20 @@
         padding: 7px 13px;
         cursor: pointer;
         transition:
-          border-color 0.2s,
-          color 0.2s,
-          background 0.2s;
+          border-color 200ms ease,
+          color 200ms ease,
+          background 200ms ease,
+          transform 160ms var(--ease-out);
       }
-      button:hover {
-        border-color: var(--accent);
-        color: var(--accent);
-        background: rgba(244, 168, 60, 0.06);
+      @media (hover: hover) and (pointer: fine) {
+        button:hover {
+          border-color: var(--accent);
+          color: var(--accent);
+          background: rgba(244, 168, 60, 0.06);
+        }
+      }
+      button:active {
+        transform: scale(0.97);
       }
       button:focus-visible {
         outline: 2px solid var(--accent);
@@ -619,7 +642,7 @@
     <div class="shell">
       <!-- ═══════════ MASTHEAD ═══════════ -->
       <header>
-        <div class="eyebrow rise">Runnable blueprint · 4 files · no build step</div>
+        <div class="eyebrow rise">A runnable blueprint · 4 files · no build step</div>
         <h1 class="rise" style="--i: 1">
           Encapsulation<br />without <em>exile</em>
         </h1>
@@ -1001,7 +1024,10 @@ defineEmbedElement(<span class="v">"review-card"</span>, observed, styles, rende
         live.setAttribute("rating", String(next));
         reflect();
         pillRender.textContent = "re-rendered";
-        pillRender.animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 400 });
+        pillRender.animate([{ opacity: 0.2 }, { opacity: 1 }], {
+          duration: 200,
+          easing: "cubic-bezier(0.23, 1, 0.32, 1)",
+        });
       };
       reflect();
 
