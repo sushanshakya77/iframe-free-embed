@@ -655,9 +655,10 @@
           your widget banished from the page it's supposed to belong to.
           <br /><br />
           A Custom Element backed by Shadow DOM satisfies the same contract by
-          <strong>scoping</strong> instead of banishing. Below are three plates
-          that prove it, running live in this page right now. Open the devtools.
-          Read the source. It's four files.
+          <strong>scoping</strong> instead of banishing. Below are three plates,
+          running live in this page right now — the first two prove it, and the
+          third is where the iframe wins. Open the devtools. Read the source.
+          It's four files.
         </div>
         <div class="masthead-links rise" style="--i: 3">
           <a class="chip" href="https://github.com/sushanshakya77/iframe-free-embed">↗ Source on GitHub</a>
@@ -875,36 +876,75 @@ p     { <span class="k">color</span>: #ff2d1f <span class="v">!important</span>;
         </div>
 
         <div class="console">
-          <div class="console-title">Idempotent registration</div>
-          <pre><span class="c">// embed scripts get included twice more often than you'd think</span>
-defineEmbedElement(<span class="v">"review-card"</span>, observed, styles, renderCard);
+          <div class="console-title">The registry is global</div>
+          <pre><span class="c">// a rival vendor's script, loading after ours, wanting the same tag</span>
+defineEmbedElement(<span class="v">"review-card"</span>, observed, styles, rivalCard);
 <span class="c">// → </span><span class="v" id="dupe-result">running…</span></pre>
           <div class="note">
-            Registering the same tag name twice throws
-            <code>NotSupportedError</code> and takes your whole bundle with it.
-            One <code>customElements.get()</code> guard makes the second load a
-            no-op. The line above is the real second call, made by this page on
-            load.
+            <b>This is the plate where the approach loses.</b> Registering a tag
+            name twice throws <code>NotSupportedError</code> and takes your
+            bundle down with it, so the factory guards with
+            <code>customElements.get()</code>. Read what that buys and what it
+            costs. When it's your own script loading twice, a silent no-op is
+            exactly right. When it's someone else who reached the name first,
+            the same silence means <em>their</em> element renders under your
+            tag, and you find out from a support ticket. The call above is real,
+            with a genuinely different renderer — Priya's card is still ours up
+            there only because we ran first.
+            <br /><br />
+            <code>customElements.define</code> claims a name in a
+            <b>global registry</b>: the one namespace a custom element cannot
+            scope away, and the clause where the iframe is plainly stronger. Two
+            frames can each hold a <code>&lt;review-card&gt;</code> and never
+            know about each other.
+            <a href="https://developer.chrome.com/blog/scoped-registries"
+              >Scoped registries</a
+            >
+            close the hole properly —
+            <code>attachShadow({ customElementRegistry })</code> hands the shadow
+            root its own definitions — and they landed in Chrome and Edge 146,
+            partially in Safari 26, and not at all in Firefox. The fix exists
+            and you can't rely on it yet. Until Firefox ships, the mitigation is
+            the least clever one available: pick a name nobody else wants.
           </div>
         </div>
       </section>
 
       <!-- ═══════════ FOOTER ═══════════ -->
       <footer>
-        <strong>One thing the iframe still does better.</strong> A shadow root
-        is an encapsulation boundary, not a security boundary —
+        <strong>What the plates don't show you.</strong> Everything above is the
+        case for scoping. This is the case against it, and it deserves better
+        than a footnote.
+        <br /><br />
+        A shadow root is an encapsulation boundary, not a security boundary.
         <code>mode: "open"</code> is reachable via
         <code>element.shadowRoot</code>, and <code>closed</code> only obscures
-        the reference. It scopes style and DOM, not origin. If you have to
-        execute <em>untrusted third-party code</em> — a user-authored plugin, an
-        ad from a network you don't control — the iframe's
-        <code>sandbox</code> and origin isolation are the correct and
-        irreplaceable tool. Use one.
+        the reference. It scopes style and DOM, not origin. And the iframe isn't
+        only protecting a host from code that <em>means</em> harm — it protects
+        the host from code that is merely <em>wrong</em>. A bug behind an origin
+        boundary stays in the frame. The same bug in the host's document has
+        their DOM, their cart, and their customer's session. Pasting a vendor's
+        <code>&lt;script&gt;</code> means accepting that vendor's CDN, their
+        dependencies, and every version they push to that URL after today,
+        without asking again.
         <br /><br />
-        But if you're rendering your own trusted UI over your own sanitized
-        data, as the overwhelming majority of embeds do, the iframe is charging
-        you for a guarantee you don't need. The question worth asking before you
-        reach for one:
+        Proximity cuts both ways generally. One layout flow means this element
+        can reflow the host's page; one accessibility tree means it can pollute
+        theirs; one event loop means its slow render is their slow render. Look
+        at the iframe in plate 02 — it carries
+        <code>loading="lazy"</code>, deferred loading as a single attribute,
+        where a same-document embed earns the same thing with an
+        <code>IntersectionObserver</code> it writes itself. Being in the page is
+        the entire benefit and the entire risk. It's one fact read twice.
+        <br /><br />
+        So: if you must execute <em>untrusted third-party code</em> — a
+        user-authored plugin, an ad from a network you don't control — or if the
+        host's security review won't accept your supply chain inside their
+        document, the iframe's <code>sandbox</code> and origin isolation are the
+        correct and irreplaceable tool. Use one. If you're rendering your own
+        trusted UI over your own sanitized data into a page whose owner agreed
+        to that, the iframe is charging you for a guarantee you don't need. The
+        question worth asking before you reach for one:
         <strong
           >am I isolating untrusted code, or am I just isolating my
           styles?</strong
@@ -1031,11 +1071,25 @@ defineEmbedElement(<span class="v">"review-card"</span>, observed, styles, rende
       };
       reflect();
 
-      /* ── Idempotent registration: the real second call ─────────── */
+      /* ── The registry is global: a real second registration ───────
+         Not a duplicate of ours — a different renderer entirely, standing
+         in for another vendor who wanted the same tag name. The guard
+         swallows it without a word. We keep the tag because we were first,
+         which is the whole problem. */
+      const rivalCard = () => {
+        const el = document.createElement("div");
+        el.className = "card";
+        el.textContent = "A rival vendor's card, rendering under your tag.";
+        return el;
+      };
+
       const dupe = document.getElementById("dupe-result");
       try {
-        defineEmbedElement("review-card", observed, styles, renderCard);
-        dupe.textContent = "no-op, no throw. Element still alive.";
+        defineEmbedElement("review-card", observed, styles, rivalCard);
+        const stolen = live.shadowRoot.textContent.includes("rival");
+        dupe.textContent = stolen
+          ? "the rival's card took the tag."
+          : "silently ignored — first registration keeps the name.";
       } catch (error) {
         dupe.textContent = `threw ${error.name}`;
         dupe.style.color = "var(--danger)";

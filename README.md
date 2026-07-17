@@ -54,22 +54,46 @@ its content — a production embed measures its own scroll height, `postMessage`
 it out, and resizes from the host on every reflow. The card beside it is just an
 element in normal flow.
 
-**03 — Attributes are the API.** The entire public surface is a tag and its
-observed attributes. `setAttribute` → `attributeChangedCallback` → re-render. No
-message bus, no handshake. Plus a live idempotency check: the page registers the
-same tag name twice on load, and the guard makes the second call a no-op instead
-of a `NotSupportedError` that would take the whole bundle down.
+**03 — Attributes are the API, and the registry is global.** The entire public
+surface is a tag and its observed attributes. `setAttribute` →
+`attributeChangedCallback` → re-render. No message bus, no handshake.
 
-## The caveat that matters
+Then the plate turns on itself. `customElements.define` claims a name in a
+**global registry** — the one namespace a custom element cannot scope away. The
+page makes a real second registration under the same tag with a *different*
+renderer, and the `customElements.get` guard swallows it without a word. That
+silence is correct when it's your own script loading twice, and wrong when it's
+another vendor who got there first: their element renders under your tag.
+[Scoped registries](https://developer.chrome.com/blog/scoped-registries) close
+the hole — Chrome and Edge 146, partially Safari 26, not Firefox. The fix exists
+and you can't rely on it yet.
 
-A shadow root is an **encapsulation** boundary, not a **security** boundary.
-`mode: "open"` is reachable via `element.shadowRoot`, and `closed` only obscures
-the reference. It isolates style and DOM scope, not origin.
+## The caveats that matter
 
-If you must execute **untrusted third-party code** — a user-authored plugin, an
-ad from a network you don't control — the iframe's `sandbox` and origin
-isolation remain the correct, irreplaceable tool. Use one.
+**It is not a security boundary.** A shadow root is an **encapsulation**
+boundary. `mode: "open"` is reachable via `element.shadowRoot`, and `closed`
+only obscures the reference. It isolates style and DOM scope, not origin.
 
-If you're rendering your own trusted UI over your own sanitized data, as the
-overwhelming majority of embeds do, the iframe is charging you for a guarantee
-you don't need with costs you do.
+And the iframe isn't only protecting a host from code that *means* harm — it
+protects the host from code that's merely *wrong*. A bug behind an origin
+boundary stays in the frame; the same bug in the host's document has their DOM,
+their cart, and their customer's session. Pasting a vendor's `<script>` means
+accepting their CDN, their dependencies, and every version they push after
+today. When a security team mandates iframes for third-party embeds, that's
+usually why — not that they think the vendor is hostile, but that they know the
+vendor can be compromised.
+
+**Proximity cuts both ways.** One layout flow means the element can reflow the
+host's page; one accessibility tree means it can pollute theirs; one event loop
+means its slow render is their slow render. The iframe in plate 02 carries
+`loading="lazy"` — deferred loading as one attribute, where a same-document
+embed earns it with an `IntersectionObserver` it writes itself. Being in the
+page is the whole benefit and the whole risk.
+
+So: if you must execute **untrusted third-party code**, or the host's security
+review won't accept your supply chain inside their document, the iframe's
+`sandbox` and origin isolation remain the correct, irreplaceable tool. Use one.
+
+If you're rendering your own trusted UI over your own sanitized data into a page
+whose owner agreed to that, as the overwhelming majority of embeds do, the
+iframe is charging you for a guarantee you don't need with costs you do.
